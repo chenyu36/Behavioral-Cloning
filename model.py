@@ -10,6 +10,7 @@ from keras.layers.core import Dense, Activation, Flatten, Dropout
 from keras.layers.convolutional import Convolution2D
 import random
 from keras import backend as K
+from sklearn.utils import shuffle
 
 def driving_acc(y_true, y_pred, threshold = 0.5/25.):
     """
@@ -85,14 +86,14 @@ def resize_image(img):
 # Python data generator
 def generate_arrays_from_file(path):
     while 1:
-#         driving_log = pd.read_csv(csv_file_path)
-#         image_file_names = driving_log['center']
-#         steering_angles = driving_log['steering']
-#         steering_angles = np.array(steering_angles)
-#         c = list(zip(image_file_names, steering_angles))
-#         random.shuffle(c)
-#         image_file_names, steering_angles = zip(*c)
-#         print('data shuffled')
+        # driving_log = pd.read_csv(csv_file_path)
+        # image_file_names = driving_log['center']
+        # steering_angles = driving_log['steering']
+        # steering_angles = np.array(steering_angles)
+        # c = list(zip(image_file_names, steering_angles))
+        # random.shuffle(c)
+        # image_file_names, steering_angles = zip(*c)
+        # print('data shuffled')
 #         for index, filename in enumerate(image_file_names):
 #             # create Numpy arrays of input data
 #             # and labels, using each row in the csv file
@@ -112,8 +113,13 @@ def generate_arrays_from_file(path):
             x = img_to_array(image)
             #y = np.array(steering_angles[index])
             y = steering_angles[random_i]
+            x = x.reshape(1,RESIZE_IMAGE_HEIGHT, RESIZE_IMAGE_WIDTH,3)
+            y = y.reshape(1)
 
-            yield x.reshape(1,RESIZE_IMAGE_HEIGHT, RESIZE_IMAGE_WIDTH,3), y.reshape(1)
+            yield x, y
+        x, y = shuffle(x, y)
+        print('data shuffled')
+        
 
 generator = generate_arrays_from_file(csv_file_path)
 print(next(generator))
