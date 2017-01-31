@@ -14,6 +14,8 @@ from io import BytesIO
 
 from keras.models import model_from_json
 from keras.preprocessing.image import ImageDataGenerator, array_to_img, img_to_array
+from resizeimage import resizeimage
+import cv2
 
 # Fix error with Keras and TensorFlow
 import tensorflow as tf
@@ -24,6 +26,39 @@ sio = socketio.Server()
 app = Flask(__name__)
 model = None
 prev_image_array = None
+
+RESIZE_IMAGE_WIDTH = 64
+RESIZE_IMAGE_HEIGHT = 32
+def resize_image(img):
+    image = resizeimage.resize_width(img, RESIZE_IMAGE_WIDTH)
+    return image
+
+def convert_image(image_data):
+    # convert to yuv color space
+    yuv = cv2.cvtColor(image_data, cv2.COLOR_BGR2YUV)
+    # split into 3 channels
+    y, u, v = cv2.split(yuv)
+    # Contrast Limited Adaptive Histogram Equalization: CLAHE
+    # http://docs.opencv.org/3.1.0/d5/daf/tutorial_py_histogram_equalization.html
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(4,4))
+    # only apply CLAHE to the y channel
+    contrastBoostedImg = clahe.apply(y)
+    
+    global num_of_channels
+    num_of_channels = 1
+    return contrastBoostedImg    
+
+def normalize_image(image_data):
+    """
+    Normalize the image data with Min-Max scaling to a range of [a, b]
+    :param image_data: The image data to be normalized
+    :return: Normalized image data
+    """
+    a = -0.5
+    b = 0.5
+    channel_min = 0
+    channel_max = 255
+    return a + ( ( (image_data - channel_min)*(b - a) )/( channel_max - channel_min ) )
 
 @sio.on('telemetry')
 def telemetry(sid, data):
@@ -37,13 +72,16 @@ def telemetry(sid, data):
     imgString = data["image"]
     image = Image.open(BytesIO(base64.b64decode(imgString)))
     #resize the image to match those used by the model
-    image = image.resize((32,16))
     image_array = np.asarray(image)
-    transformed_image_array = image_array[None, :, :, :]
+    image = convert_image(image_array)
+    image = cv2.resize(image, (RESIZE_IMAGE_WIDTH, RESIZE_IMAGE_HEIGHT))
+    x = normalize_image(image.reshape(RESIZE_IMAGE_HEIGHT, RESIZE_IMAGE_WIDTH, 1))
+    
+    transformed_image_array = x[None, :, :, :]
     # This model currently assumes that the features of the model are just the images. Feel free to change this.
     steering_angle = float(model.predict(transformed_image_array, batch_size=1))
     # The driving model currently just outputs a constant throttle. Feel free to edit this.
-    throttle = 0.2
+    throttle = 0.1
     print(steering_angle, throttle)
     send_control(steering_angle, throttle)
 
