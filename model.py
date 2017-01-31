@@ -13,6 +13,10 @@ from keras import backend as K
 from sklearn.utils import shuffle
 import cv2
 from sklearn.model_selection import train_test_split
+import math
+
+num_of_channels = 3 # color image has 3 channels
+
 
 def driving_acc(y_true, y_pred, threshold = 0.5/25.):
     """
@@ -58,10 +62,11 @@ def resize_image(img):
     image = resizeimage.resize_width(img, RESIZE_IMAGE_WIDTH)
     return image
 
-# dimensions of our images.
+# parameters for the model
 img_width, img_height = 320, 160
 RESIZE_IMAGE_WIDTH = 64
 RESIZE_IMAGE_HEIGHT = 32
+batch_size = 32
 recovery_data = False
 
 if (recovery_data == True):
@@ -89,10 +94,10 @@ x_train = []
 
 # get data from disk
 for index in range(n_train_data):
-  global y_train
+  #global y_train
   y = np.array(steering_angles[index])
   y_train.append(y)
-  global x_train
+  #global x_train
   x = cv2.imread(image_file_names[index],cv2.IMREAD_COLOR)
   x = convert_image(x)
 ## test print the image
@@ -134,7 +139,7 @@ kernel_size_w = 3
 kernel_size_h = 3
 dropout = 0.5
 print('shape of steering_angles is {}'.format(steering_angles.shape))
-input_shape = (RESIZE_IMAGE_HEIGHT, RESIZE_IMAGE_WIDTH, 1)
+input_shape = (RESIZE_IMAGE_HEIGHT, RESIZE_IMAGE_WIDTH, 3)
 model = Sequential()
 model.add(Convolution2D(nb_filters, kernel_size_w, kernel_size_h, border_mode='valid', input_shape = input_shape))
 model.add(Dropout(dropout))
@@ -159,7 +164,7 @@ model.add(Dense(1))
 model.add(Activation('linear'))
 # model.compile(loss='mse', optimizer='adam', metrics=[driving_acc])
 model.compile(loss='mse', optimizer='adam', metrics=['accuracy'])
-history = model.fit(x_train, y_train, batch_size=32, nb_epoch=10, validation_split=0.2)
+# history = model.fit(x_train, y_train, batch_size=32, nb_epoch=10, validation_split=0.2)
 
 
 
@@ -183,11 +188,37 @@ def generate_arrays_from_file(path):
         x, y = shuffle(x, y)
         print('data shuffled')
 
+def generator_with_batch(path, batch_size):
+    while 1:
+        number_of_batch = int(n_train_data/batch_size)
+
+        for batch_i in range(number_of_batch):
+            x_batch = []
+            y_batch = []
+            for i in range(batch_size):
+                # create Numpy arrays of input data
+                # and labels, using each row in the csv file
+                image = Image.open(image_file_names[i + batch_i])
+                image = resize_image(image)
+                x = img_to_array(image)
+                y = np.array(steering_angles[i + batch_i])
+                y = steering_angles[index]
+                x_batch = np.append(x_batch, x)
+                y_batch = np.append(y_batch, y)
+                x_batch = np.asarray(x_batch)
+                y_batch = np.asarray(y_batch)
+                # x = x.reshape(1,RESIZE_IMAGE_HEIGHT, RESIZE_IMAGE_WIDTH,3)
+                # y = y.reshape(1)
+            # X_train = x_batch[batch_i*batch_size:(batch_i+1)*batch_size]#.reshape(batch_size,RESIZE_IMAGE_HEIGHT, RESIZE_IMAGE_WIDTH,3)
+            # Y_train = y_batch[batch_i*batch_size:(batch_i+1)*batch_size]#.reshape(batch_size,1)
+            X_train = x_batch.reshape(batch_size,RESIZE_IMAGE_HEIGHT, RESIZE_IMAGE_WIDTH,3)
+            Y_train = y_batch.reshape(batch_size,1)
+            yield X_train, Y_train
         
 
-# generator = generate_arrays_from_file(csv_file_path)
-# print(next(generator))
-# model.fit_generator(generator, samples_per_epoch=n_train_data, nb_epoch=3)
+generator = generator_with_batch(csv_file_path, batch_size)
+print(next(generator))
+model.fit_generator(generator, samples_per_epoch=n_train_data, nb_epoch=3)
 
 
 
