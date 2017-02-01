@@ -226,7 +226,6 @@ def data_generator_with_batch(path, batch_size, split=0.2, data='train'):
                     image = resize_image(image)
                     x = img_to_array(image)
                     y = np.array(steering_angles[offset + i + batch_i*batch_size])
-                    y = steering_angles[index]
                     x_batch = np.append(x_batch, x)
                     y_batch = np.append(y_batch, y)
                     x_batch = np.asarray(x_batch)
@@ -243,7 +242,6 @@ def data_generator_with_batch(path, batch_size, split=0.2, data='train'):
                     image = resize_image(image)
                     x = img_to_array(image)
                     y = np.array(steering_angles[offset + i + batch_i*batch_size])
-                    y = steering_angles[index]
                     x_batch = np.append(x_batch, x)
                     y_batch = np.append(y_batch, y)
                     x_batch = np.asarray(x_batch)
