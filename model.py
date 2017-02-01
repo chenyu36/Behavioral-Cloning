@@ -18,6 +18,7 @@ import math
 num_of_channels = 3 # color image has 3 channels
 
 
+
 def driving_acc(y_true, y_pred, threshold = 0.5/25.):
     """
     Shows what percentage of the batch results are within 0.5 deg of true data
@@ -68,6 +69,8 @@ RESIZE_IMAGE_WIDTH = 64
 RESIZE_IMAGE_HEIGHT = 32
 batch_size = 32
 recovery_data = False
+n_split_train_data = 0 # will be determined at run time based on actual number of samples
+n_val_data = 0         # will be determined at run time based on actual number of samples
 
 if (recovery_data == True):
   csv_file_path = 'driving_log.csv'
@@ -188,37 +191,75 @@ def generate_arrays_from_file(path):
         x, y = shuffle(x, y)
         print('data shuffled')
 
-def generator_with_batch(path, batch_size):
+def data_generator_with_batch(path, batch_size, split=0.2, data='train'):
     while 1:
-        number_of_batch = int(n_train_data/batch_size)
+        global n_val_data, n_split_train_data
+        n_val_data = int(n_train_data*split)
+        n_split_train_data = n_train_data - n_val_data
+
+        # calculate number of batches
+        if data =='train':
+            number_of_batch = math.ceil(n_split_train_data/batch_size)
+            offset = 0
+            number_of_samples = n_split_train_data
+        else:
+            number_of_batch = math.ceil(n_val_data/batch_size)
+            offset = n_split_train_data
+            number_of_samples = n_val_data     
+
+        # calculate the last batch size
+        if (number_of_samples % batch_size == 0):
+            last_batch_size = batch_size
+        else:
+            last_batch_size = (number_of_samples % batch_size)
 
         for batch_i in range(number_of_batch):
             x_batch = []
             y_batch = []
-            for i in range(batch_size):
-                # create Numpy arrays of input data
-                # and labels, using each row in the csv file
-                image = Image.open(image_file_names[i + batch_i])
-                image = resize_image(image)
-                x = img_to_array(image)
-                y = np.array(steering_angles[i + batch_i])
-                y = steering_angles[index]
-                x_batch = np.append(x_batch, x)
-                y_batch = np.append(y_batch, y)
-                x_batch = np.asarray(x_batch)
-                y_batch = np.asarray(y_batch)
-                # x = x.reshape(1,RESIZE_IMAGE_HEIGHT, RESIZE_IMAGE_WIDTH,3)
-                # y = y.reshape(1)
-            # X_train = x_batch[batch_i*batch_size:(batch_i+1)*batch_size]#.reshape(batch_size,RESIZE_IMAGE_HEIGHT, RESIZE_IMAGE_WIDTH,3)
-            # Y_train = y_batch[batch_i*batch_size:(batch_i+1)*batch_size]#.reshape(batch_size,1)
-            X_train = x_batch.reshape(batch_size,RESIZE_IMAGE_HEIGHT, RESIZE_IMAGE_WIDTH,3)
-            Y_train = y_batch.reshape(batch_size,1)
-            yield X_train, Y_train
+
+            # check if we are not in last batch
+            if (batch_i < (number_of_batch - 1)):
+                for i in range(batch_size):
+                    # create Numpy arrays of input data
+                    # and labels, using each row in the csv file
+                    image = Image.open(image_file_names[offset + i + batch_i*batch_size])
+                    image = resize_image(image)
+                    x = img_to_array(image)
+                    y = np.array(steering_angles[offset + i + batch_i*batch_size])
+                    y = steering_angles[index]
+                    x_batch = np.append(x_batch, x)
+                    y_batch = np.append(y_batch, y)
+                    x_batch = np.asarray(x_batch)
+                    y_batch = np.asarray(y_batch)
+                X = x_batch.reshape(batch_size,RESIZE_IMAGE_HEIGHT, RESIZE_IMAGE_WIDTH,3)
+                Y = y_batch.reshape(batch_size,1)
+                yield X, Y
+            else:
+                # the last batch
+                for i in range(last_batch_size):
+                    # create Numpy arrays of input data
+                    # and labels, using each row in the csv file
+                    image = Image.open(image_file_names[offset + i + batch_i*batch_size])
+                    image = resize_image(image)
+                    x = img_to_array(image)
+                    y = np.array(steering_angles[offset + i + batch_i*batch_size])
+                    y = steering_angles[index]
+                    x_batch = np.append(x_batch, x)
+                    y_batch = np.append(y_batch, y)
+                    x_batch = np.asarray(x_batch)
+                    y_batch = np.asarray(y_batch)
+                X = x_batch.reshape(last_batch_size,RESIZE_IMAGE_HEIGHT, RESIZE_IMAGE_WIDTH,3)
+                Y = y_batch.reshape(last_batch_size,1)
+                yield X, Y
         
 
-generator = generator_with_batch(csv_file_path, batch_size)
-print(next(generator))
-model.fit_generator(generator, samples_per_epoch=n_train_data, nb_epoch=3)
+#generator = generator_with_batch(csv_file_path, batch_size)
+train_generator = data_generator_with_batch(csv_file_path, batch_size)
+validation_generator = data_generator_with_batch(csv_file_path, batch_size, data='validation')
+print(next(train_generator))
+print(next(validation_generator))
+model.fit_generator(train_generator, samples_per_epoch=n_split_train_data, nb_epoch=3, 
+    validation_data=validation_generator, nb_val_samples=n_val_data)
 
 
 
