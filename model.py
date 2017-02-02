@@ -18,6 +18,19 @@ from sklearn.model_selection import train_test_split
 import cv2
 import math
 
+def shift_image_pixel(image, steer, trans_range):
+    # Shape of image
+    rows, cols = image.shape[:2]
+    # Translation
+    tr_x = trans_range*np.random.uniform()-trans_range/2
+    steer_angle = steer + tr_x/trans_range*2*.2
+    #tr_y = 40*np.random.uniform()-40/2
+    tr_y = 0
+    Trans_M = np.float32([[1,0,tr_x],[0,1,tr_y]])
+    image_tr = cv2.warpAffine(image,Trans_M,(cols, rows))
+    
+    return image_tr, steer_angle
+
 def add_random_brightness(image_data):
     # Convert to HSV from RGB
     hsv = cv2.cvtColor(image_data, cv2.COLOR_RGB2HSV)
@@ -161,8 +174,9 @@ def select_image_and_process(index, data_type='train'):
     #     plt.axis("off")
     #     plt.imshow(cv2.cvtColor(x, cv2.COLOR_BGR2RGB))
     #     plt.show()
-    
+    y = np.array(steering_angles[index])
     if data_type =='train':
+        x, y = shift_image_pixel(x, y, 100)
         x = add_random_brightness(x)
         x = crop_image(x)
         # check image has been processed
@@ -173,7 +187,6 @@ def select_image_and_process(index, data_type='train'):
         #     plt.show()
         
     x = cv2.resize(x, (RESIZE_IMAGE_W, RESIZE_IMAGE_H), interpolation=cv2.INTER_AREA)
-    y = np.array(steering_angles[index])
     y = np.add(y, shift_ang)
     
     # randomly fiip the image
