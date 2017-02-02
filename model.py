@@ -1,3 +1,4 @@
+#import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from resizeimage import resizeimage
@@ -10,27 +11,12 @@ from keras.layers.core import Dense, Activation, Flatten, Dropout, Lambda
 from keras.layers.convolutional import Convolution2D
 from keras.optimizers import Adam
 from keras import backend as K
+from keras.layers.advanced_activations import LeakyReLU
 import random
 from sklearn.utils import shuffle
 from sklearn.model_selection import train_test_split
 import cv2
 import math
-
-n_channels = 3 # color image has 3 channels
-
-
-
-def driving_acc(y_true, y_pred, threshold = 0.5/25.):
-    """
-    Shows what percentage of the batch results are within 0.5 deg of true data
-	
-    Author: Thomas Antony
-    """
-    diff = K.abs(y_true - y_pred)
-    good_rows = K.lesser(diff, threshold)
-    good = K.sum(K.cast(good_rows, K.floatx()))
-    total = K.sum(K.ones_like(y_true))
-    return good*100/total
 
 def add_random_brightness(image_data):
     # Convert to HSV from RGB
@@ -42,44 +28,14 @@ def add_random_brightness(image_data):
     processed_img = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
     return processed_img 
 
-    
-def convert_image(image_data):
-    # convert to yuv color space
-    yuv = cv2.cvtColor(image_data, cv2.COLOR_BGR2YUV)
-    # split into 3 channels
-    y, u, v = cv2.split(yuv)
-    # Contrast Limited Adaptive Histogram Equalization: CLAHE
-    # http://docs.opencv.org/3.1.0/d5/daf/tutorial_py_histogram_equalization.html
-    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(4,4))
-    # only apply CLAHE to the y channel
-    contrastBoostedImg = clahe.apply(y)
-    
-    global n_channels
-    n_channels = 1
-    return contrastBoostedImg    
-
-def normalize_image(image_data):
-    """
-    Normalize the image data with Min-Max scaling to a range of [a, b]
-    :param image_data: The image data to be normalized
-    :return: Normalized image data
-    """
-    a = -0.5
-    b = 0.5
-    channel_min = 0
-    channel_max = 255
-    return a + ( ( (image_data - channel_min)*(b - a) )/( channel_max - channel_min ) )
-    
-def resize_image(img):
-    image = resizeimage.resize_width(img, RESIZE_IMAGE_W)
-    return image
 
 # parameters for the model
-EPOCHS = 10 
+n_channels = 3 # color image has 3 channels
+EPOCHS = 8
+batch_size = 128
 img_width, img_height = 320, 160
 RESIZE_IMAGE_W = 64
 RESIZE_IMAGE_H = 64
-batch_size = 128
 user_data = False
 n_split_train_data = 0 # will be determined at run time based on actual number of samples
 n_val_data = 0         # will be determined at run time based on actual number of samples
@@ -127,7 +83,7 @@ else:
 # #     cv2.imshow('test train image',x)
 # #     cv2.waitKey(0)
 # #     cv2.destroyAllWindows()
-#   x = cv2.resize(x, (RESIZE_IMAGE_W, RESIZE_IMAGE_H))
+#   x = cv2.resize(x, (RESIZE_IMAGE_W, RESIZE_IMAGE_H), interpolation=cv2.INTER_AREA)
 #   x_train.append(x)
 
 
@@ -152,7 +108,7 @@ else:
 
 
    
-# define the model with Keras
+# define the model using Keras
 nb_filters = 32
 nb_filters_2 = 64
 nb_filters_3 = 128
@@ -173,27 +129,68 @@ model.add(Convolution2D(nb_filters_3, kernel_size_w, kernel_size_h, border_mode=
 model.add(Dropout(dropout))
 model.add(Activation('relu'))
 model.add(Flatten())
-model.add(Dense(128))
+model.add(Dense(512))
 model.add(Dropout(dropout))
-model.add(Activation('relu'))
+model.add(LeakyReLU(alpha=.3))   # add an advanced activation
 model.add(Dense(64))
-model.add(Activation('relu'))
-model.add(Dense(32))
-model.add(Activation('relu'))
+model.add(LeakyReLU(alpha=.3))   # add an advanced activation
 model.add(Dense(16))
-model.add(Activation('relu'))
+model.add(LeakyReLU(alpha=.3))   # add an advanced activation
 model.add(Dense(1))
 model.compile(loss='mse', optimizer=Adam(lr = 0.0001), metrics=['accuracy'])
-# history = model.fit(x_train, y_train, batch_size=batch_size, nb_epoch=EPOCHS, validation_split=0.2)
 
+def select_image_and_process(index, data_type='train'):
+    # pick a random image from one of the cameras: (left, center, right)
+    # and add/subtract angles if necessary
+    random_choice = np.random.randint(3)
+    if (random_choice == 0):
+        img_file = 'data//' + driving_log['left'].str.strip()
+    shift_ang = .25
+    if (random_choice == 1):
+        img_file = 'data//' + driving_log['center'].str.strip()
+        shift_ang = 0.
+    if (random_choice == 2):
+        img_file = 'data//' + driving_log['right'].str.strip()
+        shift_ang = -.25  
 
-def data_generator_with_batch(path, batch_size, split=0.1, data='train'):
+    # create Numpy arrays of input data
+    # and labels, using each row in the csv file
+    x = cv2.imread(img_file[index], cv2.IMREAD_COLOR)
+    # show before image
+    # if (index==0 or index==7000):
+    #     plt.axis("off")
+    #     plt.imshow(cv2.cvtColor(x, cv2.COLOR_BGR2RGB))
+    #     plt.show()
+    
+    if data_type =='train':
+        x = add_random_brightness(x)
+        x = crop_image(x)
+        # check image has been processed
+        # show after image
+        # if (index==0 or index==7000):
+        #     plt.axis("off")
+        #     plt.imshow(cv2.cvtColor(x, cv2.COLOR_BGR2RGB))
+        #     plt.show()
+        
+    x = cv2.resize(x, (RESIZE_IMAGE_W, RESIZE_IMAGE_H), interpolation=cv2.INTER_AREA)
+    y = np.array(steering_angles[index])
+    y = np.add(y, shift_ang)
+    
+    # randomly fiip the image
+    should_flip = np.random.randint(2)
+    if should_flip==1:
+        x = cv2.flip(x,1)
+        y = -y
+    
+    return x, y # x: processed image, y: processed angle
+
+def data_generator_with_batch(path, batch_size, split=0.1, data_type='train'):
     global n_val_data, n_split_train_data
     n_val_data = int(n_train_data*split)
     n_split_train_data = n_train_data - n_val_data
 
     # calculate number of batches
-    if data =='train':
+    if data_type =='train':
         number_of_batch = math.ceil(n_split_train_data/batch_size)
         offset = 0
         number_of_samples = n_split_train_data
@@ -207,39 +204,29 @@ def data_generator_with_batch(path, batch_size, split=0.1, data='train'):
     else:
         last_batch_size = (number_of_samples % batch_size)
 
-    while 1:         
-        # shuffle the array read from csv
-#         global image_file_names, steering_angles
-#         image_file_names, steering_angles = shuffle(image_file_names, steering_angles)
-#         print('\n image file names 0 is {}'.format(image_file_names[0]))
+    while 1:
         for batch_i in range(number_of_batch):
+            # start out as 1, i.e. chance of dropping small angles is high in early rounds
+            pr_threshold = 1 / (batch_i+1) 
             x_batch = []
             y_batch = []
+
             # check if we are not in last batch
             if (batch_i < (number_of_batch - 1)):
                 for i in range(batch_size):
-                    # pick a random image from one of the cameras: (left, center, right)
-                    # and add/subtract angles if necessary
-                    random_choice = np.random.randint(3)
-                    if (random_choice == 0):
-                        image_file_names = 'data//' + driving_log['left'].str.strip()
-                    shift_ang = .25
-                    if (random_choice == 1):
-                        image_file_names = 'data//' + driving_log['center'].str.strip()
-                        shift_ang = 0.
-                    if (random_choice == 2):
-                        image_file_names = 'data//' + driving_log['right'].str.strip()
-                        shift_ang = -.25  
-                   
-                    # create Numpy arrays of input data
-                    # and labels, using each row in the csv file
-                    x = cv2.imread(image_file_names[offset + i + batch_i*batch_size],cv2.IMREAD_COLOR)
-                    if data =='train':
-                        x = add_random_brightness(x)
-                        x = crop_image(x)
-                    x = cv2.resize(x, (RESIZE_IMAGE_W, RESIZE_IMAGE_H))
-                    y = np.array(steering_angles[offset + i + batch_i*batch_size])
-                    y = np.add(y, shift_ang) 
+                    random_pick = np.random.randint(n_train_data)
+                    keep_pr = 0
+                    while keep_pr == 0:
+                        x, y = select_image_and_process(random_pick, data_type)
+                        # if the angle is too small, we may need to drop this training data so that
+                        # it has less influence on the learning
+                        if abs(y) < 0.1:
+                            pr_val = np.random.uniform()
+                            if pr_val > pr_threshold:
+                                keep_pr = 1
+                        else:
+                            keep_pr = 1
+                    
                     x_batch = np.append(x_batch, x)
                     y_batch = np.append(y_batch, y)
                     x_batch = np.asarray(x_batch)
@@ -251,28 +238,18 @@ def data_generator_with_batch(path, batch_size, split=0.1, data='train'):
             else:
                 # the last batch
                 for i in range(last_batch_size):
-                    # pick a random image from one of the cameras: (left, center, right)
-                    # and add/subtract angles if necessary
-                    random_choice = np.random.randint(3)
-                    if (random_choice == 0):
-                        image_file_names = 'data//' + driving_log['left'].str.strip()
-                    shift_ang = .25
-                    if (random_choice == 1):
-                        image_file_names = 'data//' + driving_log['center'].str.strip()
-                        shift_ang = 0.
-                    if (random_choice == 2):
-                        image_file_names = 'data//' + driving_log['right'].str.strip()
-                        shift_ang = -.25  
-                   
-                    # create Numpy arrays of input data
-                    # and labels, using each row in the csv file
-                    x = cv2.imread(image_file_names[offset + i + batch_i*batch_size],cv2.IMREAD_COLOR)
-                    if data =='train':
-                        x = add_random_brightness(x)
-                        x = crop_image(x)
-                    x = cv2.resize(x, (RESIZE_IMAGE_W, RESIZE_IMAGE_H))
-                    y = np.array(steering_angles[offset + i + batch_i*batch_size])
-                    y = np.add(y, shift_ang) 
+                    random_pick = np.random.randint(n_train_data)
+                    keep_pr = 0
+                    while keep_pr == 0:
+                        x, y = select_image_and_process(random_pick, data_type)
+                        # if the angle is too small, we may need to drop this training data so that
+                        # it has less influence on the learning
+                        if abs(y) < 0.1:
+                            pr_val = np.random.uniform()
+                            if pr_val > pr_threshold:
+                                keep_pr = 1
+                        else:
+                            keep_pr = 1
                     x_batch = np.append(x_batch, x)
                     y_batch = np.append(y_batch, y)
                     x_batch = np.asarray(x_batch)
@@ -285,7 +262,7 @@ def data_generator_with_batch(path, batch_size, split=0.1, data='train'):
 
 
 train_generator = data_generator_with_batch(csv_file_path, batch_size)
-validation_generator = data_generator_with_batch(csv_file_path, batch_size, data='validation')
+validation_generator = data_generator_with_batch(csv_file_path, batch_size, data_type='validation')
 print(next(train_generator))
 print(next(validation_generator))
 model.fit_generator(train_generator, samples_per_epoch=n_split_train_data, 
