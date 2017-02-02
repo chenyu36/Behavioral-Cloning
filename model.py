@@ -75,14 +75,22 @@ def resize_image(img):
     return image
 
 # parameters for the model
-EPOCHS = 3 
+EPOCHS = 10 
 img_width, img_height = 320, 160
 RESIZE_IMAGE_W = 64
 RESIZE_IMAGE_H = 64
-batch_size = 32
+batch_size = 128
 user_data = False
 n_split_train_data = 0 # will be determined at run time based on actual number of samples
 n_val_data = 0         # will be determined at run time based on actual number of samples
+CROP_PIXEL_FROM_TOP = 60
+CROP_PIXEL_FROM_BOTTOM = 20
+
+# Crop the sky and car hood
+def crop_image(image_data):
+    shape = image_data.shape
+    cropped_img = image_data[CROP_PIXEL_FROM_TOP:shape[0]-CROP_PIXEL_FROM_BOTTOM,:]
+    return cropped_img
 
 if (user_data == True):
   csv_file_path = 'driving_log.csv'
@@ -103,51 +111,51 @@ else:
 
 
 
+# # get data from disk
+# y_train = []
+# x_train = []
 
-y_train = []
-x_train = []
-# get data from disk
-for index in range(n_train_data):
-  #global y_train
-  y = np.array(steering_angles[index])
-  y_train.append(y)
-  #global x_train
-  x = cv2.imread(image_file_names[index],cv2.IMREAD_COLOR)
-  x = add_random_brightness(x)
-## test print the image
-#   if (index == 1):
-#     cv2.imshow('test train image',x)
-#     cv2.waitKey(0)
-#     cv2.destroyAllWindows()
-  x = cv2.resize(x, (RESIZE_IMAGE_W, RESIZE_IMAGE_H))
-  x_train.append(x)
+# for index in range(n_train_data):
+#   #global y_train
+#   y = np.array(steering_angles[index])
+#   y_train.append(y)
+#   #global x_train
+#   x = cv2.imread(image_file_names[index],cv2.IMREAD_COLOR)
+#   x = add_random_brightness(x)
+# ## test print the image
+# #   if (index == 1):
+# #     cv2.imshow('test train image',x)
+# #     cv2.waitKey(0)
+# #     cv2.destroyAllWindows()
+#   x = cv2.resize(x, (RESIZE_IMAGE_W, RESIZE_IMAGE_H))
+#   x_train.append(x)
 
 
-x_train = np.asarray(x_train)
-y_train = np.asarray(y_train)
-print('shape of x_train is {}'.format(x_train.shape))
-print('shape of y_train is {}'.format(y_train.shape))
-print('x_train[0] is {}'.format(x_train[0]))
+# x_train = np.asarray(x_train)
+# y_train = np.asarray(y_train)
+# print('shape of x_train is {}'.format(x_train.shape))
+# print('shape of y_train is {}'.format(y_train.shape))
+# print('x_train[0] is {}'.format(x_train[0]))
 
-# split the data to training set and validation set
-# x_train, x_validation, y_train, y_validation = train_test_split(x_train, y_train, test_size = 0.1, random_state = 0)
+# # split the data to training set and validation set
+# # x_train, x_validation, y_train, y_validation = train_test_split(x_train, y_train, test_size = 0.1, random_state = 0)
 
-print('length of x_train is {}'.format(len(x_train)))
-print('length of y_train is {}'.format(len(y_train)))
-# print('length of x_validation is {}'.format(len(x_validation)))
-# print('length of y_validation is {}'.format(len(y_validation)))
-print('type of x_train is {}'.format(type(x_train)))
-print('type of y_train is {}'.format(type(y_train)))
+# print('length of x_train is {}'.format(len(x_train)))
+# print('length of y_train is {}'.format(len(y_train)))
+# # print('length of x_validation is {}'.format(len(x_validation)))
+# # print('length of y_validation is {}'.format(len(y_validation)))
+# print('type of x_train is {}'.format(type(x_train)))
+# print('type of y_train is {}'.format(type(y_train)))
 
-# shuffle the training data
-x_train, y_train = shuffle(x_train, y_train)
+# # shuffle the training data
+# x_train, y_train = shuffle(x_train, y_train)
 
 
    
 # define the model with Keras
-nb_filters = 16
-nb_filters_2 = 24
-nb_filters_3 = 48
+nb_filters = 32
+nb_filters_2 = 64
+nb_filters_3 = 128
 kernel_size_w = 3
 kernel_size_h = 3
 dropout = 0.5
@@ -179,7 +187,7 @@ model.compile(loss='mse', optimizer=Adam(lr = 0.0001), metrics=['accuracy'])
 # history = model.fit(x_train, y_train, batch_size=batch_size, nb_epoch=EPOCHS, validation_split=0.2)
 
 
-def data_generator_with_batch(path, batch_size, split=0.2, data='train'):
+def data_generator_with_batch(path, batch_size, split=0.1, data='train'):
     global n_val_data, n_split_train_data
     n_val_data = int(n_train_data*split)
     n_split_train_data = n_train_data - n_val_data
@@ -201,44 +209,75 @@ def data_generator_with_batch(path, batch_size, split=0.2, data='train'):
 
     while 1:         
         # shuffle the array read from csv
-        global image_file_names, steering_angles
-        image_file_names, steering_angles = shuffle(image_file_names, steering_angles)
-
+#         global image_file_names, steering_angles
+#         image_file_names, steering_angles = shuffle(image_file_names, steering_angles)
+#         print('\n image file names 0 is {}'.format(image_file_names[0]))
         for batch_i in range(number_of_batch):
             x_batch = []
             y_batch = []
-
             # check if we are not in last batch
             if (batch_i < (number_of_batch - 1)):
                 for i in range(batch_size):
+                    # pick a random image from one of the cameras: (left, center, right)
+                    # and add/subtract angles if necessary
+                    random_choice = np.random.randint(3)
+                    if (random_choice == 0):
+                        image_file_names = 'data//' + driving_log['left'].str.strip()
+                    shift_ang = .25
+                    if (random_choice == 1):
+                        image_file_names = 'data//' + driving_log['center'].str.strip()
+                        shift_ang = 0.
+                    if (random_choice == 2):
+                        image_file_names = 'data//' + driving_log['right'].str.strip()
+                        shift_ang = -.25  
+                   
                     # create Numpy arrays of input data
                     # and labels, using each row in the csv file
                     x = cv2.imread(image_file_names[offset + i + batch_i*batch_size],cv2.IMREAD_COLOR)
                     if data =='train':
                         x = add_random_brightness(x)
+                        x = crop_image(x)
                     x = cv2.resize(x, (RESIZE_IMAGE_W, RESIZE_IMAGE_H))
                     y = np.array(steering_angles[offset + i + batch_i*batch_size])
+                    y = np.add(y, shift_ang) 
                     x_batch = np.append(x_batch, x)
                     y_batch = np.append(y_batch, y)
                     x_batch = np.asarray(x_batch)
                     y_batch = np.asarray(y_batch)
+                # reshape the batch for the model
                 X = x_batch.reshape(batch_size,RESIZE_IMAGE_H, RESIZE_IMAGE_W,n_channels)
                 Y = y_batch.reshape(batch_size,1)
                 yield X, Y
             else:
                 # the last batch
                 for i in range(last_batch_size):
+                    # pick a random image from one of the cameras: (left, center, right)
+                    # and add/subtract angles if necessary
+                    random_choice = np.random.randint(3)
+                    if (random_choice == 0):
+                        image_file_names = 'data//' + driving_log['left'].str.strip()
+                    shift_ang = .25
+                    if (random_choice == 1):
+                        image_file_names = 'data//' + driving_log['center'].str.strip()
+                        shift_ang = 0.
+                    if (random_choice == 2):
+                        image_file_names = 'data//' + driving_log['right'].str.strip()
+                        shift_ang = -.25  
+                   
                     # create Numpy arrays of input data
                     # and labels, using each row in the csv file
                     x = cv2.imread(image_file_names[offset + i + batch_i*batch_size],cv2.IMREAD_COLOR)
                     if data =='train':
                         x = add_random_brightness(x)
+                        x = crop_image(x)
                     x = cv2.resize(x, (RESIZE_IMAGE_W, RESIZE_IMAGE_H))
                     y = np.array(steering_angles[offset + i + batch_i*batch_size])
+                    y = np.add(y, shift_ang) 
                     x_batch = np.append(x_batch, x)
                     y_batch = np.append(y_batch, y)
                     x_batch = np.asarray(x_batch)
                     y_batch = np.asarray(y_batch)
+                # reshape the batch for the model
                 X = x_batch.reshape(last_batch_size,RESIZE_IMAGE_H, RESIZE_IMAGE_W,n_channels)
                 Y = y_batch.reshape(last_batch_size,1)
                 yield X, Y

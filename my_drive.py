@@ -29,36 +29,14 @@ prev_image_array = None
 
 RESIZE_IMAGE_WIDTH = 64
 RESIZE_IMAGE_HEIGHT = 64
-def resize_image(img):
-    image = resizeimage.resize_width(img, RESIZE_IMAGE_WIDTH)
-    return image
+CROP_PIXEL_FROM_TOP = 60
+CROP_PIXEL_FROM_BOTTOM = 20
 
-def convert_image(image_data):
-    # convert to yuv color space
-    yuv = cv2.cvtColor(image_data, cv2.COLOR_BGR2YUV)
-    # split into 3 channels
-    y, u, v = cv2.split(yuv)
-    # Contrast Limited Adaptive Histogram Equalization: CLAHE
-    # http://docs.opencv.org/3.1.0/d5/daf/tutorial_py_histogram_equalization.html
-    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(4,4))
-    # only apply CLAHE to the y channel
-    contrastBoostedImg = clahe.apply(y)
-    
-    global num_of_channels
-    num_of_channels = 1
-    return contrastBoostedImg    
-
-def normalize_image(image_data):
-    """
-    Normalize the image data with Min-Max scaling to a range of [a, b]
-    :param image_data: The image data to be normalized
-    :return: Normalized image data
-    """
-    a = -0.5
-    b = 0.5
-    channel_min = 0
-    channel_max = 255
-    return a + ( ( (image_data - channel_min)*(b - a) )/( channel_max - channel_min ) )
+# Crop the sky and car hood
+def crop_image(image_data):
+    shape = image_data.shape
+    cropped_img = image_data[CROP_PIXEL_FROM_TOP:shape[0]-CROP_PIXEL_FROM_BOTTOM,:]
+    return cropped_img
 
 @sio.on('telemetry')
 def telemetry(sid, data):
@@ -73,6 +51,7 @@ def telemetry(sid, data):
     image = Image.open(BytesIO(base64.b64decode(imgString)))
     #resize the image to match those used by the model
     image_array = np.asarray(image)
+    image_array = crop_image(image_array) # crop the image the same way as in the model
     image_array = cv2.resize(image_array, (RESIZE_IMAGE_WIDTH, RESIZE_IMAGE_HEIGHT)) # resizing the image the same way as in the model
     transformed_image_array = image_array[None, :, :, :]
     # This model currently assumes that the features of the model are just the images. Feel free to change this.
