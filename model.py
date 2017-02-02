@@ -6,16 +6,17 @@ from keras.models import model_from_json
 from keras.preprocessing.image import ImageDataGenerator, array_to_img, img_to_array
 from keras.models import Sequential
 from keras.layers import Convolution2D, MaxPooling2D
-from keras.layers.core import Dense, Activation, Flatten, Dropout
+from keras.layers.core import Dense, Activation, Flatten, Dropout, Lambda
 from keras.layers.convolutional import Convolution2D
-import random
+from keras.optimizers import Adam
 from keras import backend as K
+import random
 from sklearn.utils import shuffle
-import cv2
 from sklearn.model_selection import train_test_split
+import cv2
 import math
 
-num_of_channels = 3 # color image has 3 channels
+n_channels = 3 # color image has 3 channels
 
 
 
@@ -25,12 +26,22 @@ def driving_acc(y_true, y_pred, threshold = 0.5/25.):
 	
     Author: Thomas Antony
     """
-    
     diff = K.abs(y_true - y_pred)
     good_rows = K.lesser(diff, threshold)
     good = K.sum(K.cast(good_rows, K.floatx()))
     total = K.sum(K.ones_like(y_true))
     return good*100/total
+
+def add_random_brightness(image_data):
+    # Convert to HSV from RGB
+    hsv = cv2.cvtColor(image_data, cv2.COLOR_RGB2HSV)
+    # Generate random number to apply to brightness channel
+    rand = random.uniform(0.3,1.0)
+    hsv[:,:,2] = rand*hsv[:,:,2]
+    # Convert back to RGB colorspace
+    processed_img = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+    return processed_img 
+
     
 def convert_image(image_data):
     # convert to yuv color space
@@ -43,8 +54,8 @@ def convert_image(image_data):
     # only apply CLAHE to the y channel
     contrastBoostedImg = clahe.apply(y)
     
-    global num_of_channels
-    num_of_channels = 1
+    global n_channels
+    n_channels = 1
     return contrastBoostedImg    
 
 def normalize_image(image_data):
@@ -60,41 +71,41 @@ def normalize_image(image_data):
     return a + ( ( (image_data - channel_min)*(b - a) )/( channel_max - channel_min ) )
     
 def resize_image(img):
-    image = resizeimage.resize_width(img, RESIZE_IMAGE_WIDTH)
+    image = resizeimage.resize_width(img, RESIZE_IMAGE_W)
     return image
 
 # parameters for the model
+EPOCHS = 3 
 img_width, img_height = 320, 160
-RESIZE_IMAGE_WIDTH = 64
-RESIZE_IMAGE_HEIGHT = 32
+RESIZE_IMAGE_W = 64
+RESIZE_IMAGE_H = 64
 batch_size = 32
-recovery_data = False
+user_data = False
 n_split_train_data = 0 # will be determined at run time based on actual number of samples
 n_val_data = 0         # will be determined at run time based on actual number of samples
 
-if (recovery_data == True):
+if (user_data == True):
   csv_file_path = 'driving_log.csv'
 else:
   csv_file_path = 'data//driving_log.csv'
 
 # this is the output labels for each frame
 driving_log = pd.read_csv(csv_file_path)
-#steering_angles = pd.read_csv(csv_file_path, header=None, usecols=[3])
 steering_angles = driving_log['steering']
 steering_angles = np.array(steering_angles)
 n_train_data = steering_angles.shape[0]
 print('number of train data is {}'.format(n_train_data))
 
-
-if recovery_data == True:
+if user_data == True:
   image_file_names = driving_log['center']
 else:
   image_file_names = 'data//' + driving_log['center']
 
+
+
+
 y_train = []
 x_train = []
-
-
 # get data from disk
 for index in range(n_train_data):
   #global y_train
@@ -102,14 +113,13 @@ for index in range(n_train_data):
   y_train.append(y)
   #global x_train
   x = cv2.imread(image_file_names[index],cv2.IMREAD_COLOR)
-  x = convert_image(x)
+  x = add_random_brightness(x)
 ## test print the image
 #   if (index == 1):
 #     cv2.imshow('test train image',x)
 #     cv2.waitKey(0)
 #     cv2.destroyAllWindows()
-  x = cv2.resize(x, (RESIZE_IMAGE_WIDTH, RESIZE_IMAGE_HEIGHT))
-  x = normalize_image(x.reshape(RESIZE_IMAGE_HEIGHT, RESIZE_IMAGE_WIDTH, 1))
+  x = cv2.resize(x, (RESIZE_IMAGE_W, RESIZE_IMAGE_H))
   x_train.append(x)
 
 
@@ -142,15 +152,16 @@ kernel_size_w = 3
 kernel_size_h = 3
 dropout = 0.5
 print('shape of steering_angles is {}'.format(steering_angles.shape))
-input_shape = (RESIZE_IMAGE_HEIGHT, RESIZE_IMAGE_WIDTH, 3)
+input_shape = (RESIZE_IMAGE_H, RESIZE_IMAGE_W, n_channels)
 model = Sequential()
-model.add(Convolution2D(nb_filters, kernel_size_w, kernel_size_h, border_mode='valid', input_shape = input_shape))
+model.add(Lambda(lambda x: x/255 - 0.5, input_shape = input_shape))
+model.add(Convolution2D(nb_filters, kernel_size_w, kernel_size_h, border_mode='valid', subsample =(2,2)))
 model.add(Dropout(dropout))
 model.add(Activation('relu'))
-model.add(Convolution2D(nb_filters_2, kernel_size_w, kernel_size_h, border_mode='valid'))
+model.add(Convolution2D(nb_filters_2, kernel_size_w, kernel_size_h, border_mode='valid', subsample =(2,2)))
 model.add(Dropout(dropout))
 model.add(Activation('relu'))
-model.add(Convolution2D(nb_filters_3, kernel_size_w, kernel_size_h, border_mode='valid'))
+model.add(Convolution2D(nb_filters_3, kernel_size_w, kernel_size_h, border_mode='valid', subsample =(2,2)))
 model.add(Dropout(dropout))
 model.add(Activation('relu'))
 model.add(Flatten())
@@ -164,54 +175,34 @@ model.add(Activation('relu'))
 model.add(Dense(16))
 model.add(Activation('relu'))
 model.add(Dense(1))
-model.add(Activation('linear'))
-# model.compile(loss='mse', optimizer='adam', metrics=[driving_acc])
-model.compile(loss='mse', optimizer='adam', metrics=['accuracy'])
-# history = model.fit(x_train, y_train, batch_size=32, nb_epoch=10, validation_split=0.2)
+model.compile(loss='mse', optimizer=Adam(lr = 0.0001), metrics=['accuracy'])
+# history = model.fit(x_train, y_train, batch_size=batch_size, nb_epoch=EPOCHS, validation_split=0.2)
 
-
-
-# Python data generator
-def generate_arrays_from_file(path):
-    while 1:
-        driving_log = pd.read_csv(csv_file_path)
-        image_file_names = driving_log['center']
-        steering_angles = driving_log['steering']
-        for index, filename in enumerate(image_file_names):
-            # create Numpy arrays of input data
-            # and labels, using each row in the csv file
-            image = Image.open(filename)
-            image = resize_image(image)
-            x = img_to_array(image)
-            y = np.array(steering_angles[index])
-            y = steering_angles[index]
-            x = x.reshape(1,RESIZE_IMAGE_HEIGHT, RESIZE_IMAGE_WIDTH,3)
-            y = y.reshape(1)
-            yield x, y
-        x, y = shuffle(x, y)
-        print('data shuffled')
 
 def data_generator_with_batch(path, batch_size, split=0.2, data='train'):
-    while 1:
-        global n_val_data, n_split_train_data
-        n_val_data = int(n_train_data*split)
-        n_split_train_data = n_train_data - n_val_data
+    global n_val_data, n_split_train_data
+    n_val_data = int(n_train_data*split)
+    n_split_train_data = n_train_data - n_val_data
 
-        # calculate number of batches
-        if data =='train':
-            number_of_batch = math.ceil(n_split_train_data/batch_size)
-            offset = 0
-            number_of_samples = n_split_train_data
-        else:
-            number_of_batch = math.ceil(n_val_data/batch_size)
-            offset = n_split_train_data
-            number_of_samples = n_val_data     
+    # calculate number of batches
+    if data =='train':
+        number_of_batch = math.ceil(n_split_train_data/batch_size)
+        offset = 0
+        number_of_samples = n_split_train_data
+    else:
+        number_of_batch = math.ceil(n_val_data/batch_size)
+        offset = n_split_train_data
+        number_of_samples = n_val_data
+    # calculate the last batch size
+    if (number_of_samples % batch_size == 0):
+        last_batch_size = batch_size
+    else:
+        last_batch_size = (number_of_samples % batch_size)
 
-        # calculate the last batch size
-        if (number_of_samples % batch_size == 0):
-            last_batch_size = batch_size
-        else:
-            last_batch_size = (number_of_samples % batch_size)
+    while 1:         
+        # shuffle the array read from csv
+        global image_file_names, steering_angles
+        image_file_names, steering_angles = shuffle(image_file_names, steering_angles)
 
         for batch_i in range(number_of_batch):
             x_batch = []
@@ -222,15 +213,16 @@ def data_generator_with_batch(path, batch_size, split=0.2, data='train'):
                 for i in range(batch_size):
                     # create Numpy arrays of input data
                     # and labels, using each row in the csv file
-                    image = Image.open(image_file_names[offset + i + batch_i*batch_size])
-                    image = resize_image(image)
-                    x = img_to_array(image)
+                    x = cv2.imread(image_file_names[offset + i + batch_i*batch_size],cv2.IMREAD_COLOR)
+                    if data =='train':
+                        x = add_random_brightness(x)
+                    x = cv2.resize(x, (RESIZE_IMAGE_W, RESIZE_IMAGE_H))
                     y = np.array(steering_angles[offset + i + batch_i*batch_size])
                     x_batch = np.append(x_batch, x)
                     y_batch = np.append(y_batch, y)
                     x_batch = np.asarray(x_batch)
                     y_batch = np.asarray(y_batch)
-                X = x_batch.reshape(batch_size,RESIZE_IMAGE_HEIGHT, RESIZE_IMAGE_WIDTH,3)
+                X = x_batch.reshape(batch_size,RESIZE_IMAGE_H, RESIZE_IMAGE_W,n_channels)
                 Y = y_batch.reshape(batch_size,1)
                 yield X, Y
             else:
@@ -238,33 +230,39 @@ def data_generator_with_batch(path, batch_size, split=0.2, data='train'):
                 for i in range(last_batch_size):
                     # create Numpy arrays of input data
                     # and labels, using each row in the csv file
-                    image = Image.open(image_file_names[offset + i + batch_i*batch_size])
-                    image = resize_image(image)
-                    x = img_to_array(image)
+                    x = cv2.imread(image_file_names[offset + i + batch_i*batch_size],cv2.IMREAD_COLOR)
+                    if data =='train':
+                        x = add_random_brightness(x)
+                    x = cv2.resize(x, (RESIZE_IMAGE_W, RESIZE_IMAGE_H))
                     y = np.array(steering_angles[offset + i + batch_i*batch_size])
                     x_batch = np.append(x_batch, x)
                     y_batch = np.append(y_batch, y)
                     x_batch = np.asarray(x_batch)
                     y_batch = np.asarray(y_batch)
-                X = x_batch.reshape(last_batch_size,RESIZE_IMAGE_HEIGHT, RESIZE_IMAGE_WIDTH,3)
+                X = x_batch.reshape(last_batch_size,RESIZE_IMAGE_H, RESIZE_IMAGE_W,n_channels)
                 Y = y_batch.reshape(last_batch_size,1)
                 yield X, Y
         
 
-#generator = generator_with_batch(csv_file_path, batch_size)
+
 train_generator = data_generator_with_batch(csv_file_path, batch_size)
 validation_generator = data_generator_with_batch(csv_file_path, batch_size, data='validation')
 print(next(train_generator))
 print(next(validation_generator))
-model.fit_generator(train_generator, samples_per_epoch=n_split_train_data, nb_epoch=3, 
-    validation_data=validation_generator, nb_val_samples=n_val_data)
-
-
-
+model.fit_generator(train_generator, samples_per_epoch=n_split_train_data, 
+    nb_epoch=EPOCHS, validation_data=validation_generator, nb_val_samples=n_val_data)
 
 # serialize model to JSON
+model_name = 'model.json'
 model_json = model.to_json()
-with open("model.json", "w") as json_file:
+with open(model_name, "w") as json_file:
     json_file.write(model_json)
+    print("model saved to disk as {}".format(model_name))
+model_weight_name = 'model.h5'
+model.save_weights(model_weight_name)  # save the weights after training or during training
+print("model weight saved to disk as {}".format(model_weight_name))
 
-model.save_weights('model.h5')  # save the weights after training or during training
+
+
+
+

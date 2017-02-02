@@ -28,7 +28,7 @@ model = None
 prev_image_array = None
 
 RESIZE_IMAGE_WIDTH = 64
-RESIZE_IMAGE_HEIGHT = 32
+RESIZE_IMAGE_HEIGHT = 64
 def resize_image(img):
     image = resizeimage.resize_width(img, RESIZE_IMAGE_WIDTH)
     return image
@@ -73,11 +73,8 @@ def telemetry(sid, data):
     image = Image.open(BytesIO(base64.b64decode(imgString)))
     #resize the image to match those used by the model
     image_array = np.asarray(image)
-    image = convert_image(image_array)
-    image = cv2.resize(image, (RESIZE_IMAGE_WIDTH, RESIZE_IMAGE_HEIGHT))
-    x = normalize_image(image.reshape(RESIZE_IMAGE_HEIGHT, RESIZE_IMAGE_WIDTH, 1))
-    
-    transformed_image_array = x[None, :, :, :]
+    image_array = cv2.resize(image_array, (RESIZE_IMAGE_WIDTH, RESIZE_IMAGE_HEIGHT)) # resizing the image the same way as in the model
+    transformed_image_array = image_array[None, :, :, :]
     # This model currently assumes that the features of the model are just the images. Feel free to change this.
     steering_angle = float(model.predict(transformed_image_array, batch_size=1))
     # The driving model currently just outputs a constant throttle. Feel free to edit this.
