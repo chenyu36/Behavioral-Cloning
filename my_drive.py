@@ -27,10 +27,10 @@ app = Flask(__name__)
 model = None
 prev_image_array = None
 
-RESIZE_IMAGE_WIDTH = 64
-RESIZE_IMAGE_HEIGHT = 64
+RESIZE_IMAGE_WIDTH = 200
+RESIZE_IMAGE_HEIGHT = 66
 CROP_PIXEL_FROM_TOP = 60
-CROP_PIXEL_FROM_BOTTOM = 20
+CROP_PIXEL_FROM_BOTTOM = 25
 
 # Crop the sky and car hood
 def crop_image(image_data):
@@ -58,15 +58,15 @@ def telemetry(sid, data):
     steering_angle = float(model.predict(transformed_image_array, batch_size=1))
     # The driving model currently just outputs a constant throttle. Feel free to edit this.
     # throttle = (26-np.float32(speed))*0.5
-    throttle = 0.25
+    throttle = 0.20
     if steering_angle > 0.5:
       throttle = 0.10
     if 0.15 < steering_angle <= 0.5:
-      throttle = 0.2
+      throttle = 0.15
     if steering_angle <-0.5:
       throttle = 0.10
     if -0.5 >= steering_angle > -0.15:
-      throttle = 0.20    
+      throttle = 0.15    
     print(steering_angle, throttle)
     send_control(steering_angle, throttle)
 
