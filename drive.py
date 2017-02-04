@@ -14,7 +14,12 @@ from io import BytesIO
 
 from keras.models import model_from_json
 from keras.preprocessing.image import ImageDataGenerator, array_to_img, img_to_array
-
+#https://www.packtpub.com/mapt/book/application-development/9781785283932/2/ch02lvl1sec26/enhancing-the-contrast-in-an-image
+def balance_brightness(image):
+	img_yuv = cv2.cvtColor(image, cv2.COLOR_RGB2YUV)
+	img_yuv[:,:,0] = cv2.equalizeHist(img_yuv[:,:,0])
+	img_out = cv2.cvtColor(img_yuv, cv2.COLOR_YUV2RGB)
+	return img_out
 # Fix error with Keras and TensorFlow
 import tensorflow as tf
 tf.python.control_flow_ops = tf
@@ -24,6 +29,14 @@ sio = socketio.Server()
 app = Flask(__name__)
 model = None
 prev_image_array = None
+RESIZE_IMAGE_WIDTH = 200
+RESIZE_IMAGE_HEIGHT = 66
+CROP_PIXEL_FROM_TOP = 60
+CROP_PIXEL_FROM_BOTTOM = 25
+def crop_image(image_data):
+    shape = image_data.shape
+    cropped_img = image_data[CROP_PIXEL_FROM_TOP:shape[0]-CROP_PIXEL_FROM_BOTTOM,:]
+    return cropped_img
 
 @sio.on('telemetry')
 def telemetry(sid, data):
@@ -37,11 +50,22 @@ def telemetry(sid, data):
     imgString = data["image"]
     image = Image.open(BytesIO(base64.b64decode(imgString)))
     image_array = np.asarray(image)
+    image_array = crop_image(image_array) # crop the image the same way as in the model
+    image_array = cv2.resize(image_array, (RESIZE_IMAGE_WIDTH, RESIZE_IMAGE_HEIGHT)) # resizing the image the same way as in the model
     transformed_image_array = image_array[None, :, :, :]
     # This model currently assumes that the features of the model are just the images. Feel free to change this.
     steering_angle = float(model.predict(transformed_image_array, batch_size=1))
+
     # The driving model currently just outputs a constant throttle. Feel free to edit this.
-    throttle = 0.2
+    throttle = 0.20
+    if steering_angle > 0.5:
+      throttle = 0.10
+    if 0.15 < steering_angle <= 0.5:
+      throttle = 0.15
+    if steering_angle <-0.5:
+      throttle = 0.10
+    if -0.5 >= steering_angle > -0.15:
+      throttle = 0.15    
     print(steering_angle, throttle)
     send_control(steering_angle, throttle)
 
