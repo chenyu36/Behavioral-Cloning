@@ -1,16 +1,20 @@
 #import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from resizeimage import resizeimage
+from PIL import Image
 from keras.models import model_from_json
+from keras.preprocessing.image import ImageDataGenerator, array_to_img, img_to_array
 from keras.models import Sequential
 from keras.layers import Convolution2D, MaxPooling2D
 from keras.layers.core import Dense, Activation, Flatten, Dropout, Lambda
 from keras.layers.convolutional import Convolution2D
 from keras.optimizers import Adam
-from keras.layers.advanced_activations import ELU
-from keras.regularizers import l2
-from keras.callbacks import ModelCheckpoint
+from keras import backend as K
+from keras.layers.advanced_activations import LeakyReLU, ELU
 import random
+from sklearn.utils import shuffle
+from sklearn.model_selection import train_test_split
 import cv2
 import math
 
@@ -66,30 +70,6 @@ def flip_image(img, angle):
     angle = -angle
     return flipped_img, angle
 
-def add_random_shadow_with_polygon(image):
-    """ 
-    add a random trapezoid shadow overlay
-    """       
-    overlay = image.copy()
-    output = image.copy()
-    black = (0, 0, 0)
-    top_x1, top_x2, bottom_x1, bottom_x2 = 0, img_width, 0, img_width
-    random_choice = np.random.randint(2)
-    if (random_choice == 1):
-        # shadow fills to the left edge
-        top_x2 = np.random.randint(1, img_width)
-        bottom_x2 = np.random.randint(1, img_width)
-    else:
-        # shadow fills to the right edge
-        top_x1 = np.random.randint(1, img_width)
-        bottom_x1 = np.random.randint(1, img_width)
-    
-    points = np.array([[top_x1, 0], [top_x2, 0], [bottom_x2, img_height], [bottom_x1, img_height]], np.int32)
-    cv2.fillConvexPoly(overlay, points, black)
-    alpha = 0.6
-    cv2.addWeighted(overlay, alpha, output, 1 - alpha, 0, output)
-    return output
-
 def select_image_and_process(index, LR_shift = 0.20):
     """ 
     process the indexed image with all the preprocessing methods
@@ -121,7 +101,6 @@ def select_image_and_process(index, LR_shift = 0.20):
     y = np.array(steering_angles[index])
 #     print('steering angle is {}'.format(y))  
     x = add_random_brightness(x)
-    x = add_random_shadow_with_polygon(x)
     x, y = shift_image_pixel(x, y, 100)
     x = crop_image(x)
         
@@ -160,7 +139,7 @@ def data_generator_with_batch(path, batch_size):
             keep_pr = 0
             while keep_pr == 0:
                 random_pick = np.random.randint(n_train_data)
-                x_batch[i], y_batch[i] = select_image_and_process(random_pick, LR_shift=0.26)
+                x_batch[i], y_batch[i] = select_image_and_process(random_pick, 0.26)
                 # if the angle is too small, we may need to drop this training data so that
                 # it has less influence on the learning
                 if abs(y_batch[i]) < 0.1:
@@ -200,7 +179,7 @@ kernel_size_w = 3
 kernel_size_h = 3
 dropout = 0.5
 learning_rate = 0.0001
-EPOCHS = 12 
+EPOCHS = 8 
 img_width, img_height = 320, 160
 n_channels = 3  # color image has 3 channels
 RESIZE_IMAGE_W = 200
@@ -218,7 +197,7 @@ print('shape of steering_angles is {}'.format(steering_angles.shape))
 input_shape = (RESIZE_IMAGE_H, RESIZE_IMAGE_W, n_channels)
 model = Sequential()
 model.add(Lambda(lambda x: x/255 - 0.5, input_shape = input_shape))
-model.add(Convolution2D(nb_filters, kernel_size_w, kernel_size_h, border_mode='valid', subsample =(2,2), W_regularizer = l2(0.001)))
+model.add(Convolution2D(nb_filters, kernel_size_w, kernel_size_h, border_mode='valid', subsample =(2,2)))
 model.add(Dropout(dropout))
 model.add(Activation('relu'))
 model.add(Convolution2D(nb_filters_2, kernel_size_w, kernel_size_h, border_mode='valid', subsample =(2,2)))
@@ -228,22 +207,24 @@ model.add(Convolution2D(nb_filters_3, kernel_size_w, kernel_size_h, border_mode=
 model.add(Dropout(dropout))
 model.add(Activation('relu'))
 model.add(Flatten())
-model.add(Dense(512, W_regularizer = l2(0.001)))
+model.add(Dense(512))
 model.add(Dropout(dropout))
 model.add(ELU())   # add an advanced activation
-model.add(Dense(64, W_regularizer = l2(0.001)))
+model.add(Dense(64))
 model.add(ELU())   # add an advanced activation
-model.add(Dense(16, W_regularizer = l2(0.001)))
+model.add(Dense(16))
 model.add(ELU())   # add an advanced activation
-model.add(Dense(1, W_regularizer = l2(0.001)))
+model.add(Dense(1))
 adam = Adam(lr = learning_rate)
 model.compile(loss='mse', optimizer=adam, metrics=['accuracy'])
 
 
-train_generator = data_generator_with_batch(csv_file_path, batch_size)
-filepath=".//checkpoints//model-epoch{epoch:02d}-loss{loss:.4f}.h5"
-checkpointer = ModelCheckpoint(filepath=filepath, verbose=1)
-model.fit_generator(train_generator, samples_per_epoch=(n_split_train_data*3), nb_epoch=EPOCHS, callbacks=[checkpointer], initial_epoch=0)
+# Train the Model #
+# by feeding the fit_generator using the data generator
+# since we are going to use all 3 camera's data, we multiple the number of train data by 3
+# hence: samples_per_epoch=(3*n_split_train_data)       
+train_data_generator = data_generator_with_batch(csv_file_path, batch_size)
+model.fit_generator(train_data_generator, samples_per_epoch=(3*n_split_train_data), nb_epoch=EPOCHS, initial_epoch=0)
 
 
 # Save the Model #
