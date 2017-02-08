@@ -16,6 +16,7 @@ from keras.models import model_from_json
 from keras.preprocessing.image import ImageDataGenerator, array_to_img, img_to_array
 from resizeimage import resizeimage
 import cv2
+import time
 
 # Fix error with Keras and TensorFlow
 import tensorflow as tf
@@ -31,6 +32,9 @@ RESIZE_IMAGE_WIDTH = 200
 RESIZE_IMAGE_HEIGHT = 66
 CROP_PIXEL_FROM_TOP = 60
 CROP_PIXEL_FROM_BOTTOM = 25
+start_time_small_angles = time.time()
+small_angles = False
+small_angle_time_threshold = 1.5
 
 # Crop the sky and car hood
 def crop_image(image_data):
@@ -57,16 +61,31 @@ def telemetry(sid, data):
     # This model currently assumes that the features of the model are just the images. Feel free to change this.
     steering_angle = float(model.predict(transformed_image_array, batch_size=1))
     # The driving model currently just outputs a constant throttle. Feel free to edit this.
+
+    angle = abs(steering_angle)
+    if angle > 0.5:
+        throttle = 0.12
+        small_angles = False
+    elif 0.18 <= angle <= 0.5:
+        throttle = 0.18
+        small_angles = False 
+    elif 0.15 <= angle < 0.18:
+        throttle = 0.20
+        small_angles = False             
+    else:
+        if small_angles == False:
+            print('straighter course: steering angle < 0.16')
+            global small_angles
+            small_angles = True
+            global  start_time_small_angles
+            start_time_small_angles = time.time() 
+        now = time.time()
+        # if we are in stright line for 2 seconds, allow changing to higher throttle
+        if (now - start_time_small_angles > small_angle_time_threshold):
+            throttle = 0.35 
     # throttle = (26-np.float32(speed))*0.5
-    throttle = 0.20
-    if steering_angle > 0.5:
-      throttle = 0.10
-    if 0.15 < steering_angle <= 0.5:
-      throttle = 0.15
-    if steering_angle <-0.5:
-      throttle = 0.10
-    if -0.5 >= steering_angle > -0.15:
-      throttle = 0.15    
+
+
     print(steering_angle, throttle)
     send_control(steering_angle, throttle)
 
