@@ -1,25 +1,21 @@
 #import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from resizeimage import resizeimage
-from PIL import Image
 from keras.models import model_from_json
-from keras.preprocessing.image import ImageDataGenerator, array_to_img, img_to_array
 from keras.models import Sequential
 from keras.layers import Convolution2D, MaxPooling2D
 from keras.layers.core import Dense, Activation, Flatten, Dropout, Lambda
 from keras.layers.convolutional import Convolution2D
 from keras.optimizers import Adam
-from keras import backend as K
-from keras.layers.advanced_activations import LeakyReLU, ELU
+from keras.layers.advanced_activations import ELU
 import random
-from sklearn.utils import shuffle
-from sklearn.model_selection import train_test_split
 import cv2
 import math
 
+
 def shift_image_pixel(image, steer, trans_range):
-    """ Shift the image a certain pixel distance lift or right 
+    """ 
+    Shift the image a certain pixel distance lift or right 
     according to the steer parameter
     each pixel unit maps to 0.004 shift in steering angle
     """    
@@ -28,16 +24,15 @@ def shift_image_pixel(image, steer, trans_range):
 #     print('height is {}'.format(rows))
 #     print('width is {}'.format(cols))
     # Translation
-    tr_x = trans_range*np.random.uniform()-trans_range/2
-    steer_angle = steer + tr_x/trans_range*2*.2
-#     print('pixel shift is {}'.format(tr_x))
-#     print('angle shift is {}'.format(tr_x/trans_range*2*.2))
-    tr_y = 40*np.random.uniform()-40/2
-#    tr_y = 0
-    Trans_M = np.float32([[1,0,tr_x],[0,1,tr_y]])
-    image_tr = cv2.warpAffine(image,Trans_M,(cols, rows))
-    
-    return image_tr, steer_angle
+    translation_x = trans_range * np.random.uniform() - trans_range / 2
+    steer_angle = steer + translation_x/trans_range*2*.2
+#     print('pixel shift is {}'.format(translation_x))
+#     print('angle shift is {}'.format(translation_x/trans_range*2*.2))
+    translation_y = 40 * np.random.uniform() - 40 / 2
+    transformation_matrix = np.float32([[1, 0, translation_x],[0, 1, translation_y]])
+    translated_img = cv2.warpAffine(image, transformation_matrix, (cols, rows))
+    return translated_img, steer_angle
+
 
 def add_random_brightness(image_data):
     """ 
@@ -52,10 +47,11 @@ def add_random_brightness(image_data):
     processed_img = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
     return processed_img 
 
+
 # Crop the sky and car hood
 def crop_image(image_data):
     """ 
-    crop out the sky and the car hood to simplify the images for learning
+    Crop out the sky and the car hood to simplify the images for learning
     """  
     # Convert to HSV from RGB
     shape = image_data.shape
@@ -64,15 +60,16 @@ def crop_image(image_data):
 
 def flip_image(img, angle):
     """ 
-    flip (mirror) the image along the vertical axis
+    Flip (mirror) the image along the vertical axis
     """      
-    flipped_img = cv2.flip(img,1)
+    flipped_img = cv2.flip(img, 1)
     angle = -angle
     return flipped_img, angle
 
+
 def select_image_and_process(index, LR_shift = 0.20):
     """ 
-    process the indexed image with all the preprocessing methods
+    Process the indexed image with all the preprocessing methods
     1. randomly add brightness
     2. shift the pixel in x and y direction while adjusting steering angle
     3. crop out the sky and the car hood
@@ -83,29 +80,26 @@ def select_image_and_process(index, LR_shift = 0.20):
     random_choice = np.random.randint(3)
     if (random_choice == 0):
         img_file = 'data/' + driving_log['left'].str.strip()
-        shift_ang = LR_shift
+        shift_angle = LR_shift
     if (random_choice == 1):
         img_file = 'data/' + driving_log['center'].str.strip()
-        shift_ang = 0.
+        shift_angle = 0.
     if (random_choice == 2):
         img_file = 'data/' + driving_log['right'].str.strip()
-        shift_ang = -LR_shift 
-#     print('random choice is {}'.format(random_choice))
-    
+        shift_angle = -LR_shift 
+#     print('random choice is {}'.format(random_choice))    
 #     print('file index is {}'.format(index))
-#     print('file name is {}'.format(img_file[index]))    
-    # create Numpy arrays of input data
-    # and labels, using each row in the csv file
+#     print('file name is {}'.format(img_file[index]))
+
+    # read the images, perform all the preprocessing/augmentation
     x = cv2.imread(img_file[index])
     x = cv2.cvtColor(x,cv2.COLOR_BGR2RGB)
     y = np.array(steering_angles[index])
-#     print('steering angle is {}'.format(y))  
     x = add_random_brightness(x)
     x, y = shift_image_pixel(x, y, 100)
-    x = crop_image(x)
-        
+    x = crop_image(x)       
     x = cv2.resize(x, (RESIZE_IMAGE_W, RESIZE_IMAGE_H), interpolation=cv2.INTER_AREA)
-    y = np.add(y, shift_ang)
+    y = np.add(y, shift_angle)
     
     # randomly fiip the image
     should_flip = np.random.randint(2)
@@ -114,9 +108,10 @@ def select_image_and_process(index, LR_shift = 0.20):
 
     return x, y # x: processed image, y: processed angle
 
+
 def data_generator_with_batch(path, batch_size):
     """ 
-    generate the data for training
+    Generate a batch of data for training
     """         
     x_batch = np.zeros((batch_size, RESIZE_IMAGE_H, RESIZE_IMAGE_W, n_channels), dtype = np.float32)
     y_batch = np.zeros((batch_size,), dtype = np.float32)
@@ -151,7 +146,7 @@ def data_generator_with_batch(path, batch_size):
         yield x_batch, y_batch
 
 
-# Getting the output (i.e. steering_angle) from the recorded data
+# Getting the steering_angle for training from the recorded data  
 user_data = False
 if (user_data == True):
   csv_file_path = 'driving_log.csv'
@@ -167,11 +162,10 @@ if user_data == True:
   image_file_names = driving_log['center']
 else:
   image_file_names = 'data//' + driving_log['center']
-
 print('number of train data is {}'.format(n_train_data))
 
 
-# Define the model with Keras #
+# Define the model's parameters #
 nb_filters = 32
 nb_filters_2 = 64
 nb_filters_3 = 128
@@ -188,12 +182,15 @@ batch_size = 128
 CROP_PIXEL_FROM_TOP = 60
 CROP_PIXEL_FROM_BOTTOM = 25
 
+
 # Define the split if valiation set is used #
 split = 0.1
 n_val_data = int(n_train_data*split)
 n_split_train_data = n_train_data - n_val_data
-
 print('shape of steering_angles is {}'.format(steering_angles.shape))
+
+
+# Define the model with Keras #
 input_shape = (RESIZE_IMAGE_H, RESIZE_IMAGE_W, n_channels)
 model = Sequential()
 model.add(Lambda(lambda x: x/255 - 0.5, input_shape = input_shape))
@@ -220,7 +217,7 @@ model.compile(loss='mse', optimizer=adam, metrics=['accuracy'])
 
 
 # Train the Model #
-# by feeding the fit_generator using the data generator
+# by feeding the fit_generator with the data generator: train_data_generator
 # since we are going to use all 3 camera's data, we multiple the number of train data by 3
 # hence: samples_per_epoch=(3*n_split_train_data)       
 train_data_generator = data_generator_with_batch(csv_file_path, batch_size)
@@ -237,8 +234,3 @@ with open(model_name, "w") as json_file:
 model_weight_name = 'model.h5'
 model.save_weights(model_weight_name)  # save the weights after training or during training
 print("model weight saved to disk as {}".format(model_weight_name))
-
-
-
-
-
