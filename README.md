@@ -22,9 +22,20 @@ The early attemps were not successful.  I had no preprocessing other than greysc
 ####Preprocessing and augmentation
 Learning from the Nvidia's paper and other students in the Slack Carn-ND channel, I apply preprocesing and augmentation to the data. These steps involves:
 
-* Brightness: randomly changing the brightness of the image in the range from 25% to 100%. (model.py line 44) This is meant to train the model invariant to scene's brightness.
-   Example 
+* Brightness: randomly changing the brightness of the image in the range from 25% to 100%. (model.py line 44) This is meant to train the model so that it is invariant to scene's brightness.
+   Example of brightness augmentation:
+   
+   <p align="center">Before</p>
+   ![Before](images/add_random_brightness-before.jpg)
+ <p align="center">After (brightness ratio = 0.635)</p>
+   ![After](images/add_random_brightness-after.635.jpg)
 * Cropping: cropping out the sky and the car hood in the image. This greatly reduces the complexity of the data and speeds up training. (model.py line 52)
+   Example of cropping:
+   
+   <p align="center">Before</p>
+   ![Before](images/crop_image-before.jpg)
+ <p align="center">After (Image dimension = 320 x 75 (WxH))</p>
+   ![After](images/crop_image-after.jpg)
 * Augmenting data from left and right cameras: Images from the left and right cameras can simulate the view when car is not driving in the center of the track. By adding or subtracting an offset from the steering angle data of the center camera, we can generate a pair of input and output data using images from either the left or right camera. The offset is chosen emprically in the range of 0.15 - 0.26. For the purpose of simulating the recovery, we subtract the offset from the steering angle, when using the left camera's image. Similarly, we add the offset to the steering angle, when using the right camera's image. The selection of which camera's image to be augmented is random. (model.py lines 80-89)
 * Pixel shifting: by shifting the pixel to the left or right, we can simulate the change in camera's view point. (model.py line 16) This augmented data is useful in further training the model for recovery. For every pixel shifting to the left, we subtract 0.004 steering angle unit from the given angle data. Similarly, for every pixel shifting to the right, we add 0.004 steering angle unit to the given angle data.
 
