@@ -6,15 +6,32 @@ Here is the chart depicting Training loss V.S. Epoch:
 
 ![Training loss V.S. Epoch](images/P3_training_loss_vs_epoch_chart.png)
 ####Preprocessing and augmentationLearning from the Nvidia's paper and discussion with other students in the Slack Carn-ND p-behavioral-cloning channel, I apply preprocessing and augmentation to the data. These steps involve:* **Brightness**: randomly changing the brightness of the image in the range from 25% to 100%. (model.py line 44) This is meant to train the model so that it is invariant to scene's brightness. Here is an example.   
-   <p style="text-align: center;">Before</p>   ![Before](images/add_random_brightness-before.jpg)   <p style="text-align: center;">After (brightness ratio = 0.635)</p>   ![After](images/add_random_brightness-after.635.jpg)   * **Cropping**: cropping out the sky and the car hood in the image. This greatly reduces the complexity of the data and speeds up training. (model.py line 52) Here is an example.      <p style="text-align: center;"> Before</p>   ![Before](images/crop_image-before.jpg)   <p style="text-align: center;">After (Image dimension = 320 x 75 (WxH))</p>   ![After](images/crop_image-after.jpg)   * **Augmenting data from left and right cameras**: Images from the left and right cameras can simulate the view when the car is not driving in the center of the track. By adding or subtracting an offset from the steering angle data of the center camera, we can generate a pair of input and output data using images from either the left or right camera. The offset is chosen empirically in the range of 0.15 - 0.26. For the purpose of simulating the recovery, we subtract the offset from the steering angle, when using the left camera's image. Similarly, we add the offset to the steering angle, when using the right camera's image. The selection of which camera's image to be augmented is random. (model.py lines 80-89)* **Pixel shifting**: by shifting the pixel to the left or right, we can simulate the change in the camera's view point. (model.py line 16) This augmented data is useful in further training the model for recovery. For every pixel shifting to the left, we subtract 0.004 steering angle unit from the given angle data. Similarly, for every pixel shifting to the right, we add 0.004 steering angle unit to the given angle data. Here is an example.       <p style="text-align: center;">Before</p>   ![Before](images/shift_image_pixel-before.jpg)   <p style="text-align: center;">After (pixel shift x = -42.14; pixel shift y = -17.46; angle shift = -0.16)</p>   ![After](images/shift_image_pixel-after.jpg)   
+    Before
+       ![Before](images/add_random_brightness-before.jpg)
+   After: brightness ratio = 0.635
+       ![After](images/add_random_brightness-after.635.jpg)   * **Cropping**: cropping out the sky and the car hood in the image. This greatly reduces the complexity of the data and speeds up training. (model.py line 52) Here is an example.       Before
+       ![Before](images/crop_image-before.jpg)
+      After: image dimension = 320 x 75 (WxH)
+       ![After](images/crop_image-after.jpg)   * **Augmenting data from left and right cameras**: Images from the left and right cameras can simulate the view when the car is not driving in the center of the track. By adding or subtracting an offset from the steering angle data of the center camera, we can generate a pair of input and output data using images from either the left or right camera. The offset is chosen empirically in the range of 0.15 - 0.26. For the purpose of simulating the recovery, we subtract the offset from the steering angle, when using the left camera's image. Similarly, we add the offset to the steering angle, when using the right camera's image. The selection of which camera's image to be augmented is random. (model.py lines 80-89)* **Pixel shifting**: by shifting the pixel to the left or right, we can simulate the change in the camera's view point. (model.py line 16) This augmented data is useful in further training the model for recovery. For every pixel shifting to the left, we subtract 0.004 steering angle unit from the given angle data. Similarly, for every pixel shifting to the right, we add 0.004 steering angle unit to the given angle data. Here is an example.       Before
+       ![Before](images/shift_image_pixel-before.jpg)
+      After (pixel shift x = -42.14; pixel shift y = -17.46; angle shift = -0.16)
+       ![After](images/shift_image_pixel-after.jpg)   
 * **Flipping**: by flipping the image along the vertical-axis, we can simulate the mirror image of the data. (model.py line 61) This technique doubles the amount of usable data. Here is an example.
- 	<p style="text-align: center;">Before</p>   ![Before](images/flip_image-before.jpg)    <p style="text-align: center;">After</p>   ![After](images/flip_image-after.jpg)
-* **Compressing the image along y-axis**: this technique did not make the cut in the final model as it did not seem to improve the model's performace. This augmentation tries to simulate the effect of the road vanishing sooner due to a change in the slope of the track. Here is an example.
+    Before
+       ![Before](images/flip_image-before.jpg)
+      After
+       ![After](images/flip_image-after.jpg)
+   
+* **Compressing the image along the y-axis**: this technique did not make the cut in the final model as it did not seem to improve the model's performace. This augmentation tries to simulate the effect of the road vanishing sooner due to a change in the slope of the track. Here is an example.
     
-   <p style="text-align: center;">Before</p>   ![Before](images/transform_image_in_y_axis-before.jpg)    <p style="text-align: center;">After</p>   ![After](images/transform_image_in_y_axis-after.jpg)
+    Before
+       ![Before](images/transform_image_in_y_axis-before.jpg)
+      After
+       ![After](images/transform_image_in_y_axis-after.jpg)
+   
 * **Creating random trapezoid-shaped shodows**: this technique did not make the cut in the final model as it did not seem to improve the model's performace, especially when running the simulator at higher quality settings such as "good", "beautiful" or "fantastic". At these settings, shadows of the enviromental elements are casted onto the track and create an uneven looking surface with high contrast. Here is an example of the augmentation.
    
-   Before
+    Before
    ![Before](images/add_random_shadow_with_polygon-before.jpg)
       After
-   ![After](images/add_random_shadow_with_polygon-after.jpg)
+      ![After](images/add_random_shadow_with_polygon-after.jpg)
