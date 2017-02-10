@@ -14,7 +14,7 @@ Here is the chart depicting Training loss V.S. Epoch:
    <p style="text-align: center;">Before</p>   ![Before](images/transform_image_in_y_axis-before.jpg)    <p style="text-align: center;">After</p>   ![After](images/transform_image_in_y_axis-after.jpg)
 * **Creating random trapezoid-shaped shodows**: this technique did not make the cut in the final model as it did not seem to improve the model's performace, especially when running the simulator at higher quality settings such as "good", "beautiful" or "fantastic". At these settings, shadows of the enviromental elements are casted onto the track and create an uneven looking surface with high contrast. Here is an example of the augmentation.
    
-Before
+   Before
    ![Before](images/add_random_shadow_with_polygon-before.jpg)
-   After
+      After
    ![After](images/add_random_shadow_with_polygon-after.jpg)
