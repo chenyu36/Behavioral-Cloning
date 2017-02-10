@@ -1,7 +1,7 @@
 #import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from keras.models import model_from_json
+from keras.models import model_from_json, load_model
 from keras.models import Sequential
 from keras.layers import Convolution2D, MaxPooling2D
 from keras.layers.core import Dense, Activation, Flatten, Dropout, Lambda
@@ -226,11 +226,12 @@ model.fit_generator(train_data_generator, samples_per_epoch=(3*n_split_train_dat
 
 # Save the Model #
 # serialize model to JSON and save the model's weights
-model_name = 'model.json'
-model_json = model.to_json()
-with open(model_name, "w") as json_file:
-    json_file.write(model_json)
-    print("model saved to disk as {}".format(model_name))
-model_weight_name = 'model.h5'
-model.save_weights(model_weight_name)  # save the weights after training or during training
-print("model weight saved to disk as {}".format(model_weight_name))
+model_name = 'model.h5'
+model.save(model_name)
+# model_json = model.to_json()
+# with open(model_name, "w") as json_file:
+#     json_file.write(model_json)
+print("model saved to disk as {}".format(model_name))
+# model_weight_name = 'model.h5'
+# model.save_weights(model_weight_name)  # save the weights after training or during training
+# print("model weight saved to disk as {}".format(model_weight_name))
